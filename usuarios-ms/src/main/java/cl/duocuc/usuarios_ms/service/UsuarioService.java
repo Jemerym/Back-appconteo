@@ -36,11 +36,15 @@ public class UsuarioService {
     private final AlmacenamientoService almacenamientoService;
     private final PasswordEncoder passwordEncoder;
 
-    public List<UsuarioResponse> listar(String buscar) {
+    // incluirAnulados = false -> solo usuarios activos (lo normal); true -> todos (pantalla de administración)
+    public List<UsuarioResponse> listar(String buscar, boolean incluirAnulados) {
         String texto = buscar == null ? "" : buscar.trim();
-        List<Usuario> usuarios = texto.isEmpty()
+        List<Usuario> usuarios = (texto.isEmpty()
                 ? usuarioRepository.findAllByOrderByNombreAsc()
-                : usuarioRepository.findByNombreContainingIgnoreCaseOrCorreoContainingIgnoreCaseOrderByNombreAsc(texto, texto);
+                : usuarioRepository.findByNombreContainingIgnoreCaseOrCorreoContainingIgnoreCaseOrderByNombreAsc(texto, texto))
+                .stream()
+                .filter(u -> incluirAnulados || estaActivo(u))
+                .toList();
 
         Map<Long, String> roles = rolClient.listar().stream()
                 .collect(Collectors.toMap(RolDto::id, RolDto::nombre));
@@ -66,8 +70,9 @@ public class UsuarioService {
         }
         validarContrasena(datos.contrasena());
 
-        Long rolId = datos.rolId() != null ? datos.rolId() : ROL_OBSERVADOR;
-        validarRol(rolId);
+        // SEGURIDAD: el registro es público, así que SIEMPRE crea un Observador.
+        // Se ignora datos.rolId(): si no, cualquiera podría registrarse como Administrador.
+        Long rolId = ROL_OBSERVADOR;
 
         Usuario nuevo = Usuario.builder()
                 .nombre(datos.nombre().trim())
@@ -87,6 +92,8 @@ public class UsuarioService {
         Usuario usuario = usuarioRepository.findByCorreoIgnoreCase(normalizar(datos.correo()))
                 .filter(u -> passwordEncoder.matches(datos.contrasena(), u.getContrasenaHash()))
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Correo o contraseña incorrectos"));
+        // Se revisa DESPUÉS de validar la clave: así no se revela a un extraño qué cuentas están anuladas.
+        validarActivo(usuario);
         return aRespuesta(usuario);
     }
 
@@ -138,6 +145,7 @@ public class UsuarioService {
         Usuario usuario = usuarioRepository.findByCorreoIgnoreCase(normalizar(datos.correo()))
                 .filter(u -> passwordEncoder.matches(normalizar(datos.palabraSecreta()), u.getPalabraSecretaHash()))
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Correo o palabra secreta incorrectos"));
+        validarActivo(usuario);
         validarContrasena(datos.nuevaClave());
 
         usuario.setContrasenaHash(passwordEncoder.encode(datos.nuevaClave()));
@@ -163,13 +171,27 @@ public class UsuarioService {
         return almacenamientoService.leer(usuario.getAvatar());
     }
 
-    public void eliminar(Long id) {
+    // ANULAR en vez de eliminar: el usuario queda guardado (con su foto y su historial)
+    // pero no puede iniciar sesión hasta que un administrador lo restaure.
+    public UsuarioResponse anular(Long id) {
         Usuario usuario = buscar(id);
-        if (esUltimoAdministrador(usuario)) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "No se puede eliminar al último administrador");
+        if (!estaActivo(usuario)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "El usuario ya está anulado");
         }
-        usuarioRepository.delete(usuario);
-        almacenamientoService.eliminar(usuario.getAvatar());
+        if (esUltimoAdministrador(usuario)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "No se puede anular al último administrador");
+        }
+        usuario.setActivo(false);
+        return aRespuesta(usuarioRepository.save(usuario));
+    }
+
+    public UsuarioResponse restaurar(Long id) {
+        Usuario usuario = buscar(id);
+        if (estaActivo(usuario)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "El usuario ya está activo");
+        }
+        usuario.setActivo(true);
+        return aRespuesta(usuarioRepository.save(usuario));
     }
 
     private Usuario buscar(Long id) {
@@ -183,10 +205,22 @@ public class UsuarioService {
         }
     }
 
-    // No se puede dejar el sistema sin administradores.
+    // No se puede dejar el sistema sin administradores ACTIVOS.
     private boolean esUltimoAdministrador(Usuario usuario) {
         return ROL_ADMINISTRADOR.equals(usuario.getRolId())
-                && usuarioRepository.countByRolId(ROL_ADMINISTRADOR) <= 1;
+                && estaActivo(usuario)
+                && usuarioRepository.countByRolIdAndActivoTrue(ROL_ADMINISTRADOR) <= 1;
+    }
+
+    // null cuenta como activo (filas creadas antes de existir la columna)
+    private boolean estaActivo(Usuario usuario) {
+        return !Boolean.FALSE.equals(usuario.getActivo());
+    }
+
+    private void validarActivo(Usuario usuario) {
+        if (!estaActivo(usuario)) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Usuario anulado, contacta al administrador");
+        }
     }
 
     private void validarCorreo(String correo) {
@@ -230,7 +264,8 @@ public class UsuarioService {
                 usuario.getCorreo(),
                 usuario.getRolId(),
                 rolNombre,
-                urlAvatar(usuario)
+                urlAvatar(usuario),
+                estaActivo(usuario)
         );
     }
 

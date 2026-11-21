@@ -18,5 +18,6 @@ public interface UsuarioRepository extends JpaRepository<Usuario, Long> {
 
     boolean existsByCorreoIgnoreCaseAndIdNot(String correo, Long id);
 
-    long countByRolId(Long rolId);
+    // Solo cuentan los administradores ACTIVOS (uno anulado no administra nada).
+    long countByRolIdAndActivoTrue(Long rolId);
 }

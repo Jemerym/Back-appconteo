@@ -7,6 +7,7 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import lombok.AllArgsConstructor;
+import org.hibernate.annotations.ColumnDefault;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -41,5 +42,10 @@ public class Usuario {
     private Long rolId;
 
     @Column(name = "avatar")
-    private String avatar;;
+    private String avatar;
+
+    @Column(nullable = false)
+    @ColumnDefault("true")
+    @Builder.Default
+    private Boolean activo = true;
 }
