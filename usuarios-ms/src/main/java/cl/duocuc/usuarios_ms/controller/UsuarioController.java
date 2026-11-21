@@ -3,6 +3,7 @@ package cl.duocuc.usuarios_ms.controller;
 import cl.duocuc.usuarios_ms.dto.ActualizarUsuarioRequest;
 import cl.duocuc.usuarios_ms.dto.CambiarContrasenaRequest;
 import cl.duocuc.usuarios_ms.dto.LoginRequest;
+import cl.duocuc.usuarios_ms.dto.RecuperarClaveRequest;
 import cl.duocuc.usuarios_ms.dto.RegistroRequest;
 import cl.duocuc.usuarios_ms.dto.UsuarioResponse;
 import cl.duocuc.usuarios_ms.service.UsuarioService;
@@ -10,7 +11,6 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -32,8 +32,9 @@ public class UsuarioController {
     private final UsuarioService usuarioService;
 
     @GetMapping
-    public List<UsuarioResponse> listar(@RequestParam(required = false) String buscar) {
-        return usuarioService.listar(buscar);
+    public List<UsuarioResponse> listar(@RequestParam(required = false) String buscar,
+                                        @RequestParam(defaultValue = "false") boolean incluirAnulados) {
+        return usuarioService.listar(buscar, incluirAnulados);
     }
 
     @GetMapping("/{id}")
@@ -63,6 +64,12 @@ public class UsuarioController {
         usuarioService.cambiarContrasena(id, datos);
     }
 
+    @PostMapping("/recuperar-clave")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void recuperarClave(@RequestBody RecuperarClaveRequest datos) {
+        usuarioService.recuperarClave(datos);
+    }
+
     @PostMapping(value = "/{id}/avatar", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public UsuarioResponse subirAvatar(@PathVariable Long id, @RequestParam("archivo") MultipartFile archivo) {
         return usuarioService.subirAvatar(id, archivo);
@@ -75,9 +82,14 @@ public class UsuarioController {
                 .body(usuarioService.obtenerAvatar(id));
     }
 
-    @DeleteMapping("/{id}")
-    @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void eliminar(@PathVariable Long id) {
-        usuarioService.eliminar(id);
+    // Ya no se elimina: se ANULA y se puede RESTAURAR (se conserva el registro del usuario).
+    @PutMapping("/{id}/anular")
+    public UsuarioResponse anular(@PathVariable Long id) {
+        return usuarioService.anular(id);
+    }
+
+    @PutMapping("/{id}/restaurar")
+    public UsuarioResponse restaurar(@PathVariable Long id) {
+        return usuarioService.restaurar(id);
     }
 }
