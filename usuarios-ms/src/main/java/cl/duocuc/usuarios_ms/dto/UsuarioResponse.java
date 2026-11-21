@@ -6,6 +6,7 @@ public record UsuarioResponse(
         String correo,
         Long rolId,
         String rolNombre,
-        String avatarUrl
+        String avatarUrl,
+        Boolean activo
 ) {
 }
