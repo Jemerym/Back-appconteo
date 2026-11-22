@@ -14,9 +14,9 @@ public class UsuarioClient {
 
     private final WebClient web;
 
-    // Quitas WebClient.Builder de aquí y lo creas directamente adentro:
-    public UsuarioClient(@Value("${usuarios.service.url}") String url) {
-        this.web = WebClient.builder().baseUrl(url).build();
+    // El builder viene de WebClientConfig (@LoadBalanced): así "http://usuarios-ms" se resuelve con Eureka.
+    public UsuarioClient(WebClient.Builder builder, @Value("${usuarios.service.url}") String url) {
+        this.web = builder.baseUrl(url).build();
     }
 
     /** GET /api/usuarios/{id}. Falla con 400 si no existe y con 503 si usuarios-service no responde. */
