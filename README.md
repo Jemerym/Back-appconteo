@@ -3,6 +3,7 @@
 Backend de **AppConteo**: **4 microservicios Spring Boot** con MySQL. La app Android los usa para manejar usuarios, roles, turnos y los registros de aforo (conteo de clientes y transeúntes por acceso).
 
 📱 **Repositorio de la app Android:** https://github.com/Jemerym/AppConteo
+
 📋 **Tablero del proyecto (Trello):** https://trello.com/b/9NETUH65/app-conteo
 
 ---
