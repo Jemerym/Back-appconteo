@@ -1,6 +1,6 @@
-# Backend-TOTUM
+# Back-appconteo
 
-Backend de **TOTUM**: **4 microservicios Spring Boot** con MySQL. La app Android los usa para manejar usuarios, roles, turnos y los registros de aforo (conteo de clientes y transeúntes por acceso).
+Backend de **AppConteo**: **4 microservicios Spring Boot** con MySQL. La app Android los usa para manejar usuarios, roles, turnos y los registros de aforo (conteo de clientes y transeúntes por acceso).
 
 📱 **Repositorio de la app Android:** https://github.com/Jemerym/AppConteo
 
@@ -12,14 +12,20 @@ Backend de **TOTUM**: **4 microservicios Spring Boot** con MySQL. La app Android
 
 ```
 App Android (Retrofit)
-   ├──► roles-ms      :8081  ── MySQL roles_db
-   ├──► usuarios-ms   :8082  ── MySQL usuarios_db   ──(WebClient)──► roles-ms
-   ├──► turnos-ms     :8083  ── MySQL turnos_db     ──(WebClient)──► usuarios-ms
-   └──► registros-ms  :8084  ── MySQL registros_db
+   │
+   ▼
+api-gateway :8080 ──┬──► roles-ms      :8081  ── MySQL roles_db
+        │           ├──► usuarios-ms   :8082  ── MySQL usuarios_db   ──(por nombre)──► roles-ms
+        │           ├──► turnos-ms     :8083  ── MySQL turnos_db     ──(por nombre)──► usuarios-ms
+        │           └──► registros-ms  :8084  ── MySQL registros_db
+        ▼
+eureka-server :8761  (todos se registran aquí con su nombre)
 ```
 
 | Microservicio | Puerto | Base de datos | Responsabilidad |
 |---|---|---|---|
+| **eureka-server** | 8761 | — | Registro de servicios (Spring Cloud Netflix Eureka). Panel en http://localhost:8761 |
+| **api-gateway** | 8080 | — | Puerta de entrada única (Spring Cloud Gateway). Reparte `/api/roles`, `/api/usuarios`, `/api/turnos` y `/api/registros` al microservicio que corresponde. |
 | **roles-ms** | 8081 | `roles_db` | Catálogo de roles (Administrador, Observador). |
 | **usuarios-ms** | 8082 | `usuarios_db` | Registro, login (BCrypt), perfil, foto de perfil, recuperar clave, anular y restaurar usuarios. |
 | **turnos-ms** | 8083 | `turnos_db` | Programar turnos, validar choques de horario, turno en curso (hora de Chile), anular y restaurar turnos. |
@@ -28,7 +34,7 @@ App Android (Retrofit)
 > **Anular en vez de eliminar:** usuarios, turnos y registros no se borran. Se anulan: dejan de contar o de funcionar, pero se conservan y se pueden restaurar.
 
 ### Tecnologías
-Java 17, Spring Boot 4, Spring Data JPA, MySQL, Lombok, WebClient (comunicación entre microservicios), BCrypt (contraseñas) y springdoc-openapi (Swagger).
+Java 17, Spring Boot 4, Spring Cloud (Netflix Eureka y Gateway), Spring Data JPA, MySQL, Lombok, WebClient con `@LoadBalanced` (comunicación entre microservicios por nombre), BCrypt (contraseñas) y springdoc-openapi (Swagger).
 
 ---
 
@@ -59,7 +65,12 @@ cd Back-appconteo
 ### 3. Levantar los microservicios
 Las bases de datos se crean solas (`createDatabaseIfNotExist=true`) y las tablas también (`ddl-auto=update`).
 
-Levanta los 4 microservicios **en este orden**, porque usuarios-ms necesita a roles-ms y turnos-ms necesita a usuarios-ms. En cada carpeta, ejecuta su comando (en Windows usa `mvnw.cmd` en vez de `./mvnw`):
+Levanta todo **en este orden**: primero Eureka, luego los microservicios y al final el gateway. En cada carpeta, ejecuta su comando (en Windows usa `mvnw.cmd` en vez de `./mvnw`):
+
+**eureka-server** (primero):
+```bash
+./mvnw spring-boot:run
+```
 
 **roles-ms:**
 ```bash
@@ -81,13 +92,20 @@ Levanta los 4 microservicios **en este orden**, porque usuarios-ms necesita a ro
 ./mvnw spring-boot:run
 ```
 
+**api-gateway** (al final):
+```bash
+./mvnw spring-boot:run
+```
+
+Después de levantar todo, espera unos **30 segundos** antes de usar la app: Eureka tarda ese tiempo en avisar a cada servicio dónde están los demás.
+
 También puedes ejecutar la clase `*MsApplication` de cada microservicio desde IntelliJ.
 
 **Swagger** (documentación y pruebas de cada microservicio): `http://localhost:<puerto>/swagger-ui.html`
 
 ### 4. Conectar la app
-- En la app, `data/remote/RetrofitClient.kt` debe apuntar a la **IP del PC** donde corren los microservicios, por ejemplo `http://192.168.1.5:8082/`. Desde el emulador se usa `10.0.2.2`.
-- En el **Firewall de Windows**, permite los puertos **8082, 8083 y 8084** para que el celular pueda conectarse.
+- La app llama solo al **API Gateway**. En `data/remote/RetrofitClient.kt`, `URL_GATEWAY` debe ser la **IP del PC** con el puerto 8080, por ejemplo `http://192.168.1.5:8080/`. Desde el emulador se usa `http://10.0.2.2:8080/`.
+- En el **Firewall de Windows**, permite el puerto **8080** para que el celular pueda conectarse.
 
 ### 5. Usuarios de prueba
 usuarios-ms los crea solo la primera vez:
